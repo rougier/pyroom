@@ -1,0 +1,284 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#  ______         ______                       
+# |   __ \.--.--.|   __ \.-----.-----.--------.
+# |    __/|  |  ||      <|  _  |  _  |        |
+# |___|   |___  ||___|__||_____|_____|__|__|__|
+#         |_____| Copyright 2009 © Nicolas Rougier
+#                         
+#  This program is free software: you can redistribute it and/or modify it under
+#  the terms of the GNU General Public License as published by the Free Software
+#  Foundation, either  version 3 of the  License, or (at your  option) any later
+#  version.
+# 
+#  This program is  distributed in the hope that it will  be useful, but WITHOUT
+#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+#  FOR  A  PARTICULAR PURPOSE.  See  the GNU  General  Public  License for  more
+#  details.
+# 
+#  You should have received a copy  of the GNU General Public License along with
+#  this program. If not, see <http://www.gnu.org/licenses/>.
+''' '''
+import pyglet
+from pyglet.gl import *
+from pyglet.window import key
+from pyglet.window import Window
+from pyglet.graphics import Batch
+from pyglet.text.caret import Caret
+from pyglet.text import Label
+from pyglet.text.layout import IncrementalTextLayout as Layout
+from time import localtime, strftime
+from document import Document
+
+styles = {
+    'darkgreen' :{'text_fg'      : (  0, 164,   0, 255),
+                  'selection_fg' : (  0, 164,   0, 255),
+                  'selection_bg' : (  0, 128,   0, 255),
+                  'page_fg'      : (  0,   0,   0, 255),
+                  'page_bg'      : (  0,   0,   0, 255),
+                  'screen'       : (  0,   0,   0, 255),
+                  'clock'        : (  0, 200,   0,  64),
+                  'margin'       : 11,
+                  'font_name'    : 'Monaco',
+                  'font_size'    : 11,
+                  'page_size'    : (0.45, 0.75) },
+    'oblivion' : {'text_fg'      : (211, 215, 207, 255),
+                  'selection_fg' : (238, 238, 236, 255),
+                  'selection_bg' : (136, 138, 133, 255),
+                  'page_fg'      : ( 46,  52,  54, 255),
+                  'page_bg'      : ( 46,  52,  54, 255),
+                  'screen'       : ( 46,  52,  54, 255),
+                  'clock'        : (211, 215, 207,  32),
+                  'margin'       : 11,
+                  'font_name'    : 'Liberation Mono',
+                  'font_size'    : 11,
+                  'page_size'    : (0.45, 0.75) },
+    'darkblue' : {'text_fg'      : (255, 255, 255, 150),
+                  'selection_fg' : (255, 255, 255, 255),
+                  'selection_bg' : (55,   98, 140, 255),
+                  'page_fg'      : ( 25,  45,  64, 255),
+                  'page_bg'      : ( 25,  45,  64, 255),
+                  'screen'       : ( 25,  45,  64, 255),
+                  'clock'        : (156, 156, 156,  32),
+                  'margin'       : 11,
+                  'font_name'    : 'Liberation Mono',
+                  'font_size'    : 11,
+                  'page_size'    : (0.55, 0.75) },
+    'darkgrey' : {'text_fg'      : (124, 124, 124, 255),
+                  'selection_fg' : (124, 124, 124, 255),
+                  'selection_bg' : ( 64,  64,  64, 255),
+                  'page_fg'      : (  0,   0,   0, 255),
+                  'page_bg'      : (  0,   0,   0, 255),
+                  'screen'       : (  0,   0,   0, 255),
+                  'clock'        : (255, 255, 255,  32),
+                  'margin'       : 11,
+                  'font_name'    : 'Bitstream Vera Sans Mono',
+                  'font_size'    : 11,
+                  'page_size'    : (0.4, 0.75) }
+}
+
+
+# ------------------------------------------------------------------------------
+if __name__ == '__main__':
+    import codecs
+
+    from optparse import OptionParser
+    usage = "Usage: %pyroom [options] file"
+    parser = OptionParser(usage=usage, version="%prog 1.0")
+    (options, args) = parser.parse_args()
+    window = Window(width=700,height=800,fullscreen=False, resizable=True, vsync=0)
+
+    batch = Batch()
+    document = Document('')
+    style = styles['darkblue']
+    scroll = 0
+
+    document.set_style(0,0, {'font_name': style['font_name'],
+                             'font_size': style['font_size'],
+                             'color' : style['text_fg']})
+    layout = Layout(document,
+                    int(window.width*style['page_size'][0]),
+                    int(window.height*style['page_size'][1]),
+                    multiline=True, batch = batch)
+    layout.anchor_x='left'
+    layout.anchor_y='bottom'
+    layout.x = int((window.width  - layout.width)/2)
+    layout.y = int((window.height - layout.height)/2)
+    layout.selection_color = style['selection_fg']
+    layout.selection_background_color = style['selection_bg']
+    x,y,z = 0,0,0
+    w,h = window.width, window.height
+    screen = batch.add(4, pyglet.gl.GL_QUADS, None,
+                       ('v3f', (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)),
+                       ('c4B', style['screen']*4))
+    x,y,z = layout.x-style['margin'], layout.y-style['margin'], .1
+    w,h = layout.width+2*style['margin'], layout.height+2*style['margin']
+    page_bg = batch.add(4, pyglet.gl.GL_QUADS, None,
+                        ('v3f', (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)),
+                        ('c4B', style['page_bg']*4))
+    z += .1
+    page_fg = batch.add(4, pyglet.gl.GL_LINE_LOOP, None,
+                        ('v3f', (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)),
+                        ('c4B', style['page_fg']*4))
+    caret = pyglet.text.caret.Caret(layout)
+    window.push_handlers(caret)
+    caret.visible = True
+    caret.color = style['text_fg'][:3]
+    caret.PERIOD = 0
+    cursor = window.get_system_mouse_cursor('text')
+    if args:
+        file = codecs.open(args[0], "r", "utf-8" )
+        text = file.read()
+        document.begin_not_undoable_action()
+        document.insert_text(0, text)
+        document.end_not_undoable_action()
+    caret.position = len(document.text)
+    clock = Label(strftime("%H:%M", localtime()),
+                  color = style["clock"], font_size = 48,
+                  x = window.width-5, y = window.height-5,
+                  anchor_x = 'right', anchor_y = 'top')
+
+    glEnable(GL_NORMALIZE)
+    glEnable(GL_BLEND) 
+
+    # __________________________________________________________ on_time_update
+    def on_time_update(dt):
+        clock.text = strftime("%H:%M", localtime())
+    pyglet.clock.schedule_interval(on_time_update, 60)
+
+#     # _________________________________________________________ on_scroll_update
+#     def on_scroll_update(dt):
+#         global scroll
+
+#         layout.view_y = int(layout.view_y + scroll)
+#         scroll = scroll*.985
+#         if abs(scroll) < 2:
+#             scroll = 0
+#             layout.view_y = int(layout.view_y)
+# #    pyglet.clock.schedule_interval(on_scroll_update, 1/60.)
+
+
+    # __________________________________________________________ on_mouse_motion
+    @window.event
+    def on_mouse_motion(x, y, dx, dy):
+        #global scroll
+        #scroll = 0
+        if (0 < x-layout.x < layout.width and 0 < y-layout.y < layout.height):
+            window.set_mouse_cursor(cursor)
+        else:
+            window.set_mouse_cursor(None)
+
+    # ___________________________________________________________ on_mouse_press
+    @window.event
+    def on_mouse_press(x, y, button, modifiers):
+        #global scroll
+        if button == pyglet.window.mouse.MIDDLE:
+            document.paste(caret.position, 'PRIMARY')
+        elif button == pyglet.window.mouse.LEFT:
+            #scroll = 0
+            caret.on_mouse_press(x, y, button, modifiers)
+        return pyglet.event.EVENT_HANDLED
+
+    # _________________________________________________________ on_mouse_release
+    @window.event
+    def on_mouse_release(x, y, button, modifiers):
+        if (button == pyglet.window.mouse.LEFT and 
+            layout.selection_start != layout.selection_end):
+            document.copy(layout.selection_start, layout.selection_end,
+                          'PRIMARY')
+
+    # __________________________________________________________ on_mouse_scroll
+    @window.event
+    def on_mouse_scroll(x, y, dx, dy):
+        #global scroll
+        #if scroll*dy < 0: scroll = dy
+        #else:             scroll += dy
+        ''' Scroll layout according to mouse scroll. '''
+        layout.view_y += dy
+        caret.on_mouse_scroll(x,y,dx,dy)
+        #print x,y,dx,dy
+
+    # ________________________________________________________________ on_resize
+    @window.event
+    def on_resize(width, height):
+        x,y,z = 0,0,0
+        w,h = width, height
+        if window.fullscreen:
+            layout.width  = int(w*style['page_size'][0])
+            layout.height = int(h*style['page_size'][1])
+        else:
+            layout.width  = int(w - 2*style['margin'])
+            layout.height = int(h - 2*style['margin'])
+        layout.x = int((w - layout.width)/2)
+        layout.y = int((h - layout.height)/2)
+        screen.vertices = (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)
+        x,y,z = layout.x-style['margin'], layout.y-style['margin'], .1
+        w = layout.width+2*style['margin']
+        h = layout.height+2*style['margin']
+        page_bg.vertices = (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)
+        z += .1
+        page_fg.vertices = (x,y,z, x+w,y,z, x+w,y+h,z,  x,y+h,z)
+        clock.x = width-5
+        clock.y = height-5
+
+    # __________________________________________________________________ on_draw
+    @window.event
+    def on_draw():
+        window.clear()
+        batch.draw()
+        clock.draw()
+
+
+    # _____________________________________________________________ on_key_press
+    @window.event
+    def on_key_press(symbol, modifiers):
+        if symbol == key.ESCAPE:
+            window.set_fullscreen(not window.fullscreen)
+        # Start of line
+        elif symbol == key.A and modifiers & key.MOD_CTRL:
+            p = document.text[:caret.position].rfind('\n') + 1
+            caret.position = p
+        # End of line
+        elif symbol == key.E and modifiers & key.MOD_CTRL:
+            p = document.text[caret.position:].find('\n')
+            caret.position += p
+        # Delete
+        elif symbol == key.D and modifiers & key.MOD_CTRL:
+            document.delete_text(caret.position, caret.position+1)
+        # Undo
+        elif symbol == key.Z and modifiers & key.MOD_CTRL:
+            p = document.undo()
+            if p: caret.position = p
+        # Redo
+        elif symbol == key.Y and modifiers & key.MOD_CTRL:
+            p = document.redo()
+            if p: caret.position = p
+        # Copy
+        elif symbol == key.C and modifiers & key.MOD_CTRL:
+            document.copy(layout.selection_start, layout.selection_end)
+            layout.selection_start = layout.selection_end
+        # Cut
+        elif symbol == key.X and modifiers & key.MOD_CTRL:
+            p = layout.selection_start
+            document.cut(layout.selection_start, layout.selection_end)
+            layout.selection_start = layout.selection_end
+            caret.position = p
+        # Paste
+        elif symbol == key.V and modifiers & key.MOD_CTRL:
+            document.paste(caret.position)
+        # Increase font size
+        elif symbol == key.PLUS and modifiers & key.MOD_CTRL:
+            size = document.get_style('font_size')
+            size += 1
+            size = document.set_style(0,0, {'font_size': size})
+        # Decrease font size
+        elif symbol == key.MINUS and modifiers & key.MOD_CTRL:
+            size = document.get_style('font_size')
+            size -= 1
+            if size > 5:
+                size = document.set_style(0,0, {'font_size': size})
+        else:
+            return pyglet.event.EVENT_UNHANDLED
+        return pyglet.event.EVENT_HANDLED
+
+    pyglet.app.run()
